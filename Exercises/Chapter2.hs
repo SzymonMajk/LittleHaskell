@@ -1,4 +1,4 @@
---function, that returns the element before the last
+--function that returns the element before the last
 lastButOne :: [a] -> a
 lastButOne [] = error "List is empty"
 lastButOne [_] = error "List have only one element"
