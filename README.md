@@ -1,1 +1,1 @@
-Start it!
+Some exercises in Haskell
