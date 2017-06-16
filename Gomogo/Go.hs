@@ -59,6 +59,29 @@ findPositionsNearPawn b (c:cs) = (searchBlankNear b c) ++ (findPositionsNearPawn
 
 --test findPositionsNearPawn (putPawn White (3,5) ( putPawn Black (3,6) ( putPawn White (2,5) initializeBoard))) $ allBusyPositions $ putPawn White (3,5) $ putPawn Black (3,6) $ putPawn White (2,5) initializeBoard
 
+data GameCondition = InProgress | UserWin | ComputerWin | Draw
+
+instance Show GameCondition where
+  show InProgress = "Keep going!"
+  show UserWin = "User Win!"
+  show ComputerWin = "Computer Win!"
+  show Draw = "Draw!"
+
+endGame :: GameBoard -> GameCondition
+endGame b
+  | draw b = Draw
+  | win b White = UserWin
+  | win b Black = ComputerWin
+  | otherwise = InProgress
+
+win :: GameBoard -> Pawn -> Bool
+win b player = simpleWin b player || simpleLose b player where
+  simpleLose b player = undefined
+  simpleWin b player = undefined
+
+draw :: GameBoard -> Bool
+draw b = length (allFreePositions b) == 0
+
 ----------------------------  GameBoard rating  -------------------------------
 
 rateBoard :: GameBoard -> Int
@@ -92,7 +115,7 @@ rateAmbience b player coords offset
 
 ----------------------------- GameTree and MinMax -----------------------------
 
---In this implementation computer cannot start if computer starts it needs to put first Pawn with different algorithm
+--In this implementation computer cannot start if computer starts it needs to put first Pawn with different algorithm, so let always put computer first pawn in the middle and then start algorithm
 generateGameTree gameBoard pawn = T.Node gameBoard [generateGameTree (putPawn pawn x gameBoard) (enemyPawn pawn) | x <- findPositionsNearPawn gameBoard (allBusyPositions gameBoard)]
 
 
