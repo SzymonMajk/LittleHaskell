@@ -81,7 +81,7 @@ rateAmbience b player coords offset
   | (abs (fst offset)) == 4 || (abs (snd offset)) == 4 = check b player ((fst coords)+(fst offset),(snd coords) + (snd offset)) 4
   | (abs (fst offset)) == 3 || (abs (snd offset)) == 3 = check b player ((fst coords)+(fst offset),(snd coords) + (snd offset)) 3
   | (abs (fst offset)) == 2 || (abs (snd offset)) == 2 = check b player ((fst coords)+(fst offset),(snd coords) + (snd offset)) 2
-  | (abs (fst offset)) == 1 || (abs (snd offset)) == 1 = check b player ((fst coords)+(fst offset),(snd coords) + (snd offset))
+  | (abs (fst offset)) == 1 || (abs (snd offset)) == 1 = check b player ((fst coords)+(fst offset),(snd coords) + (snd offset)) 1
   | otherwise = 0 where
     check b player coords strength
       | getPawn b coords == player = 10*strength + 10
