@@ -59,10 +59,10 @@ findPositionsNearPawn b (c:cs) = (searchBlankNear b c) ++ (findPositionsNearPawn
 
 --test findPositionsNearPawn (putPawn White (3,5) ( putPawn Black (3,6) ( putPawn White (2,5) initializeBoard))) $ allBusyPositions $ putPawn White (3,5) $ putPawn Black (3,6) $ putPawn White (2,5) initializeBoard
 
-data GameCondition = InProgress | UserWin | ComputerWin | Draw
+data GameCondition = InProgress | UserWin | ComputerWin | Draw deriving Eq
 
 instance Show GameCondition where
-  show InProgress = "Keep going!"
+  show InProgress = "Your turn!"
   show UserWin = "User Win!"
   show ComputerWin = "Computer Win!"
   show Draw = "Draw!"
@@ -70,22 +70,46 @@ instance Show GameCondition where
 endGame :: GameBoard -> GameCondition
 endGame b
   | draw b = Draw
+  | lose b Black = UserWin
+  | lose b White = ComputerWin
   | win b White = UserWin
   | win b Black = ComputerWin
   | otherwise = InProgress
 
 win :: GameBoard -> Pawn -> Bool
-win b player = simpleWin b player || simpleLose b player where
-  simpleLose b player = undefined
-  simpleWin b player = undefined
+win b player = checkPoints 5 b player (allPlayerPositions b player)
+
+lose :: GameBoard -> Pawn -> Bool
+lose b player = checkPoints 6 b player (allPlayerPositions b player)
+
+checkPoints :: Int -> GameBoard -> Pawn -> [(Int, Int)] -> Bool
+checkPoints len b player coords = or (map (checkPoint len b player) coords)
+
+checkPoint :: Int -> GameBoard -> Pawn -> (Int, Int) -> Bool
+checkPoint len b player coords = or (fmap (checkLine b player coords len) offsets) where
+  offsets = [(x,y)| x<-[-1,0,1], y<-[-1,0,1], x /= 0 || y /= 0]
+
+checkLine :: GameBoard -> Pawn -> (Int,Int) -> Int -> (Int,Int) -> Bool
+checkLine b player coords len offset
+  | len == 0 = True
+  | (fst coords) < 1 || (fst coords) > size || (snd coords) < 1 || (snd coords) > size = False
+  | player == (getPawn b coords) = checkLine b player (fst coords + fst offset,snd coords + snd offset) (len-1) offset
+  | otherwise = False
 
 draw :: GameBoard -> Bool
 draw b = length (allFreePositions b) == 0
 
+--test1 endGame $ putPawn White (3,5) $ putPawn Black (3,6) $ putPawn White (2,5) initializeBoard
+--test2 endGame $ putPawn White (3,1) $ putPawn White (3,4) $ putPawn White (3,3) $ putPawn White (3,2) $ putPawn White (3,5) $ putPawn Black (3,6) $ putPawn White (2,5) initializeBoard
+--test3 endGame $ putPawn White (3,1) $ putPawn White (3,4) $ putPawn White (3,3) $ putPawn White (3,2) $ putPawn White (3,5) $ putPawn White (3,6) $ putPawn White (2,5) initializeBoard
+
 ----------------------------  GameBoard rating  -------------------------------
 
 rateBoard :: GameBoard -> Int
-rateBoard b = (ratePlayer b White) - (ratePlayer b Black)
+rateBoard b
+  | endGame b == UserWin = -100000000
+  | endGame b == ComputerWin = 100000000
+  | otherwise = (ratePlayer b White) - (ratePlayer b Black)
 
 ratePlayer :: GameBoard -> Pawn -> Int
 ratePlayer b player = sum (ratePositions b player (allPlayerPositions b player))
@@ -113,9 +137,9 @@ rateAmbience b player coords offset
 
 --test rateBoard (putPawn White (3,5) $ putPawn Black (3,6) $ putPawn White (2,5) initializeBoard)
 
------------------------------ GameTree and MinMax -----------------------------
+---------------------------- GameTree and MiniMax -----------------------------
 
---In this implementation computer cannot start if computer starts it needs to put first Pawn with different algorithm, so let always put computer first pawn in the middle and then start algorithm
+--In this implementation computer cannot start with minimax if computer starts it needs to put first Pawn with different algorithm, so let always put computer first pawn in the middle and then start algorithm
 generateGameTree gameBoard pawn = T.Node gameBoard [generateGameTree (putPawn pawn x gameBoard) (enemyPawn pawn) | x <- findPositionsNearPawn gameBoard (allBusyPositions gameBoard)]
 
 
