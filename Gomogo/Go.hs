@@ -2,7 +2,7 @@ import qualified Data.Matrix as M
 import qualified Data.List as L
 import qualified Data.Tree as T
 
-import Text.ParserCombinators.Parsec
+import Data.Maybe (fromJust)
 import System.IO
 import Data.Char
 
@@ -152,15 +152,8 @@ minimaxPutPawn b = (putPawn Black bestMove b) where
 -------------------------------------------------------------------------------
 ------------------------------- User Interface -------------------------------
 
---doPlay = getContents >>= (mapM_ play) . lines
-
-parsePos :: Parser Int
-parsePos = do
-            x <- lower
-            if (x<'a' || x>'z') then
-              unexpected "Tylko znaki od a-z"
-            else
-              return $ (ord x) - (ord 'a') + 1
+parseCoordinate :: Char -> (Maybe Int)
+parseCoordinate e = if (e < 'A' || e > (chr ((ord 'A') + size - 1))) then Nothing else Just (ord e - 64)
 
 play :: GameBoard -> (IO ())
 play board = do
@@ -171,18 +164,27 @@ play board = do
     InProgress -> do
       hPutStrLn stderr ("Your turn!\n" ++ (show board))
       putStrLn (show board)
-      putStrLn "\nEnter coordinates: "
-      coords <- getLine
-      --tutaj parsowanie...
-      let userMove = (putPawn White (2,3) board)
-      case (endGame userMove) of
-        UserWin -> (hPutStrLn stderr ((show board) ++ "\nUser Won!"))
-        ComputerWin -> (hPutStrLn stderr ((show board) ++ "\nComputer Won!"))
-        Draw -> (hPutStrLn stderr ((show board) ++ "\nDraw!"))
-        InProgress -> do
-          let enemyMove = (minimaxPutPawn userMove)
-          putStrLn ("\nEnemy turn!\n" ++ (show enemyMove))
-          play enemyMove
+      putStrLn "\nEnter row index: "
+      row <- getLine
+      if parseCoordinate (head row) == Nothing then do
+        putStrLn "Invalid row coordinate!"
+        play board
+      else do
+        putStrLn "\nEnter row column: "
+        col <- getLine
+        if parseCoordinate (head col) == Nothing then do
+          putStrLn "Invalid col coordinate!"
+          play board
+        else do
+          let userMove = (putPawn White (fromJust (parseCoordinate (head row)),fromJust (parseCoordinate (head col))) board)
+          case (endGame userMove) of
+            UserWin -> (hPutStrLn stderr ((show userMove) ++ "\nUser Won!"))
+            ComputerWin -> (hPutStrLn stderr ((show userMove) ++ "\nComputer Won!"))
+            Draw -> (hPutStrLn stderr ((show userMove) ++ "\nDraw!"))
+            InProgress -> do
+              let enemyMove = (minimaxPutPawn userMove)
+              putStrLn ("\nEnemy turn!\n" ++ (show enemyMove))
+              play enemyMove
 
 -------------------------------------------------------------------------------
 ------------------------------------ Tests ------------------------------------
