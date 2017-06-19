@@ -19,10 +19,11 @@ instance Show Pawn where
 enemyPawn White = Black
 enemyPawn Black = White
 
-data GameBoard = GameBoard {board :: (M.Matrix Pawn)}
+data GameBoard =  GameBoard  {board :: (M.Matrix Pawn), lastMove :: (Int,Int)}
 
 instance Show GameBoard where
-  show (GameBoard b) = unlines (con (wrapColumn size leftColumn) (lines (show b))) ++ "    " ++ L.intercalate "   " [[c] | c <- leftColumn]
+  show (GameBoard b last) = unlines (con (wrapColumn size leftColumn) (lines (removePunc (show b)))) ++ "   " ++ L.intercalate " " [[c] | c <- leftColumn] where
+    removePunc xs = [ x | x <- xs, not (x `elem` ",.?!-:;\"\'") ]
 
 con :: [String] -> [String] -> [String]
 con [] _ = []
@@ -40,23 +41,23 @@ size = 19
 ----------------------------- GameBoard functions -----------------------------
 
 initializeBoard :: GameBoard
-initializeBoard = putPawn Black (mid,mid) (GameBoard $ M.matrix size size (\(i,j) -> Blank)) where
+initializeBoard = putPawn Black (mid,mid) (GameBoard (M.matrix size size (\(i,j) -> Blank)) (0,0)) where
   mid = div (1 + size) 2
 
 putPawn :: Pawn -> (Int, Int) -> GameBoard -> GameBoard
-putPawn p coords b = GameBoard $ M.setElem p coords (board b)
+putPawn p coords b = GameBoard (M.setElem p coords (board b)) coords
 
 getPawn :: GameBoard -> (Int, Int) -> Pawn
 getPawn b coords = M.getElem (fst coords) (snd coords) (board b)
 
 allFreePositions :: GameBoard -> [(Int, Int)]
-allFreePositions (GameBoard b) = [(x,y)| x <-[1..size], y <- [1..size], (M.getElem x y b) == Blank]
+allFreePositions (GameBoard b coords) = [(x,y)| x <-[1..size], y <- [1..size], (M.getElem x y b) == Blank]
 
 allBusyPositions :: GameBoard -> [(Int, Int)]
-allBusyPositions (GameBoard b) = [(x,y)| x <-[1..size], y <- [1..size], (M.getElem x y b) /= Blank]
+allBusyPositions (GameBoard b coords) = [(x,y)| x <-[1..size], y <- [1..size], (M.getElem x y b) /= Blank]
 
 allPlayerPositions :: GameBoard -> Pawn -> [(Int, Int)]
-allPlayerPositions (GameBoard b) player = [(x,y)| x <-[1..size], y <- [1..size], (M.getElem x y b) == player]
+allPlayerPositions (GameBoard b coords) player = [(x,y)| x <-[1..size], y <- [1..size], (M.getElem x y b) == player]
 
 findPositionsNearPawn :: GameBoard -> [(Int, Int)] -> [(Int, Int)]
 findPositionsNearPawn b [] = []
@@ -108,7 +109,7 @@ rateBoard :: GameBoard -> Int
 rateBoard b
   | endGame b == UserWin = -100000000
   | endGame b == ComputerWin = 100000000
-  | otherwise = (ratePlayer b White) - (ratePlayer b Black)
+  | otherwise = (ratePlayer b Black) - (ratePlayer b White)
 
 ratePlayer :: GameBoard -> Pawn -> Int
 ratePlayer b player = sum (ratePositions b player (allPlayerPositions b player))
@@ -137,17 +138,25 @@ rateAmbience b player coords offset
 -------------------------------------------------------------------------------
 ---------------------------- GameTree and MiniMax -----------------------------
 
+minimaxDepth = 2
+
 generateGameTree :: GameBoard -> Pawn -> Int -> T.Tree GameBoard
 generateGameTree gameBoard _ 0 = T.Node gameBoard [] 
-generateGameTree gameBoard pawn depth = T.Node gameBoard [generateGameTree (putPawn pawn x gameBoard) (enemyPawn pawn) (depth-1) | x <- findPositionsNearPawn gameBoard (allBusyPositions gameBoard)]
+generateGameTree gameBoard pawn depth = T.Node gameBoard [generateGameTree (putPawn pawn xs gameBoard) (enemyPawn pawn) (depth-1) | xs <- findPositionsNearPawn gameBoard (allBusyPositions gameBoard)]
 
---minimax (T.Node board subTrees) Pawn max = ...
+minimax :: Pawn -> Bool -> (T.Tree GameBoard) -> (Int,(Int,Int))
+minimax player _ (T.Node board []) = ((rateBoard board),(lastMove board))
+minimax player max (T.Node board subTrees) = minormax (map (minimax (enemyPawn player) (not max)) subTrees) where
+  minormax
+    | max = maximum
+    | otherwise = minimum
 
+minimaxPutPawn :: GameBoard -> GameBoard
 minimaxPutPawn b = (putPawn Black bestMove b) where
-  bestMove = head (findPositionsNearPawn b (allBusyPositions b))
+  bestMove = snd (minimax Black True (generateGameTree b Black minimaxDepth))
 
-
-
+--simplyCompPawn :: GameBoard -> GameBoard
+--simplyCompPawn b = (putPawn Black (head (findPositionsNearPawn b (allBusyPositions b))) b)
 
 -------------------------------------------------------------------------------
 ------------------------------- User Interface -------------------------------
@@ -163,28 +172,35 @@ play board = do
     Draw -> (hPutStrLn stderr ((show board) ++ "\nDraw!"))
     InProgress -> do
       hPutStrLn stderr ("Your turn!\n" ++ (show board))
-      putStrLn (show board)
       putStrLn "\nEnter row index: "
       row <- getLine
-      if parseCoordinate (head row) == Nothing then do
+      if (null row) || parseCoordinate (head row) == Nothing then do
         putStrLn "Invalid row coordinate!"
         play board
       else do
-        putStrLn "\nEnter row column: "
+        putStrLn "\nEnter col index: "
         col <- getLine
-        if parseCoordinate (head col) == Nothing then do
+        if (null col) || parseCoordinate (head col) == Nothing then do
           putStrLn "Invalid col coordinate!"
           play board
         else do
-          let userMove = (putPawn White (fromJust (parseCoordinate (head row)),fromJust (parseCoordinate (head col))) board)
-          case (endGame userMove) of
-            UserWin -> (hPutStrLn stderr ((show userMove) ++ "\nUser Won!"))
-            ComputerWin -> (hPutStrLn stderr ((show userMove) ++ "\nComputer Won!"))
-            Draw -> (hPutStrLn stderr ((show userMove) ++ "\nDraw!"))
-            InProgress -> do
-              let enemyMove = (minimaxPutPawn userMove)
-              putStrLn ("\nEnemy turn!\n" ++ (show enemyMove))
-              play enemyMove
+          if (getPawn board (fromJust (parseCoordinate (head row)),fromJust (parseCoordinate (head col)))) /= Blank then do
+            putStrLn "Position is not free!"
+            play board
+          else do
+            let userMove = (putPawn White (fromJust (parseCoordinate (head row)),fromJust (parseCoordinate (head col))) board)
+            case (endGame userMove) of
+              UserWin -> (hPutStrLn stderr ((show userMove) ++ "\nUser Won!"))
+              ComputerWin -> (hPutStrLn stderr ((show userMove) ++ "\nComputer Won!"))
+              Draw -> (hPutStrLn stderr ((show userMove) ++ "\nDraw!"))
+              InProgress -> do
+                putStrLn (show userMove)
+                let enemyMove = (minimaxPutPawn userMove)
+                putStrLn ("\nEnemy turn!\n" ++ (show enemyMove))
+                play enemyMove
+
+main :: IO ()
+main = play initializeBoard
 
 -------------------------------------------------------------------------------
 ------------------------------------ Tests ------------------------------------
@@ -198,3 +214,5 @@ play board = do
 --endGame $ putPawn White (3,1) $ putPawn White (3,4) $ putPawn White (3,3) $ putPawn White (3,2) $ putPawn White (3,5) $ putPawn White (3,6) $ putPawn White (2,5) initializeBoard
 
 --test rateBoard (putPawn White (3,5) $ putPawn Black (3,6) $ putPawn White (2,5) initializeBoard)
+
+--minimaxPutPawn $ putPawn White (7,7) $ putPawn White (8,8) $ putPawn White (9,9) $ putPawn Black (11,11) $ putPawn Black (12,12) $ initializeBoard
