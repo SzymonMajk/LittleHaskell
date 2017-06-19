@@ -2,6 +2,13 @@ import qualified Data.Matrix as M
 import qualified Data.List as L
 import qualified Data.Tree as T
 
+import Text.ParserCombinators.Parsec
+import System.IO
+import Data.Char
+
+------------------------ Pawn and GameBoard structures ------------------------
+-------------------------------------------------------------------------------
+
 data Pawn = White | Black | Blank deriving (Eq)
 
 instance Show Pawn where
@@ -29,18 +36,18 @@ wrapColumn depth (x:xs) = [x]:(wrapColumn (depth-1) xs)
 leftColumn = take size ['A'..]
 size = 19
 
+-------------------------------------------------------------------------------
 ----------------------------- GameBoard functions -----------------------------
 
 initializeBoard :: GameBoard
-initializeBoard = GameBoard $ M.matrix size size (\(i,j) -> Blank)
+initializeBoard = putPawn Black (mid,mid) (GameBoard $ M.matrix size size (\(i,j) -> Blank)) where
+  mid = div (1 + size) 2
 
 putPawn :: Pawn -> (Int, Int) -> GameBoard -> GameBoard
 putPawn p coords b = GameBoard $ M.setElem p coords (board b)
 
 getPawn :: GameBoard -> (Int, Int) -> Pawn
 getPawn b coords = M.getElem (fst coords) (snd coords) (board b)
-
---test putPawn White (3,5) $ putPawn Black (3,6) $ putPawn White (2,5) initializeBoard
 
 allFreePositions :: GameBoard -> [(Int, Int)]
 allFreePositions (GameBoard b) = [(x,y)| x <-[1..size], y <- [1..size], (M.getElem x y b) == Blank]
@@ -57,15 +64,10 @@ findPositionsNearPawn b (c:cs) = (searchBlankNear b c) ++ (findPositionsNearPawn
   searchBlankNear b coords = [(x,y)| x <-[1..size], y <- [1..size], (near x y coords) && (getPawn b (x,y)) == Blank]
   near x y coords = abs ((fst coords)-x) <= 1 && abs ((snd coords)-y) <= 1
 
---test findPositionsNearPawn (putPawn White (3,5) ( putPawn Black (3,6) ( putPawn White (2,5) initializeBoard))) $ allBusyPositions $ putPawn White (3,5) $ putPawn Black (3,6) $ putPawn White (2,5) initializeBoard
+-------------------------------------------------------------------------------
+------------------------------- Win Condition ---------------------------------
 
 data GameCondition = InProgress | UserWin | ComputerWin | Draw deriving Eq
-
-instance Show GameCondition where
-  show InProgress = "Your turn!"
-  show UserWin = "User Win!"
-  show ComputerWin = "Computer Win!"
-  show Draw = "Draw!"
 
 endGame :: GameBoard -> GameCondition
 endGame b
@@ -99,10 +101,7 @@ checkLine b player coords len offset
 draw :: GameBoard -> Bool
 draw b = length (allFreePositions b) == 0
 
---test1 endGame $ putPawn White (3,5) $ putPawn Black (3,6) $ putPawn White (2,5) initializeBoard
---test2 endGame $ putPawn White (3,1) $ putPawn White (3,4) $ putPawn White (3,3) $ putPawn White (3,2) $ putPawn White (3,5) $ putPawn Black (3,6) $ putPawn White (2,5) initializeBoard
---test3 endGame $ putPawn White (3,1) $ putPawn White (3,4) $ putPawn White (3,3) $ putPawn White (3,2) $ putPawn White (3,5) $ putPawn White (3,6) $ putPawn White (2,5) initializeBoard
-
+-------------------------------------------------------------------------------
 ----------------------------  GameBoard rating  -------------------------------
 
 rateBoard :: GameBoard -> Int
@@ -135,11 +134,65 @@ rateAmbience b player coords offset
       | getPawn b coords == (enemyPawn player) = -10
       | otherwise = 10
 
---test rateBoard (putPawn White (3,5) $ putPawn Black (3,6) $ putPawn White (2,5) initializeBoard)
-
+-------------------------------------------------------------------------------
 ---------------------------- GameTree and MiniMax -----------------------------
 
---In this implementation computer cannot start with minimax if computer starts it needs to put first Pawn with different algorithm, so let always put computer first pawn in the middle and then start algorithm
-generateGameTree gameBoard pawn = T.Node gameBoard [generateGameTree (putPawn pawn x gameBoard) (enemyPawn pawn) | x <- findPositionsNearPawn gameBoard (allBusyPositions gameBoard)]
+generateGameTree :: GameBoard -> Pawn -> Int -> T.Tree GameBoard
+generateGameTree gameBoard _ 0 = T.Node gameBoard [] 
+generateGameTree gameBoard pawn depth = T.Node gameBoard [generateGameTree (putPawn pawn x gameBoard) (enemyPawn pawn) (depth-1) | x <- findPositionsNearPawn gameBoard (allBusyPositions gameBoard)]
+
+--minimax (T.Node board subTrees) Pawn max = ...
+
+minimaxPutPawn b = (putPawn Black bestMove b) where
+  bestMove = head (findPositionsNearPawn b (allBusyPositions b))
 
 
+
+
+-------------------------------------------------------------------------------
+------------------------------- User Interface -------------------------------
+
+--doPlay = getContents >>= (mapM_ play) . lines
+
+parsePos :: Parser Int
+parsePos = do
+            x <- lower
+            if (x<'a' || x>'z') then
+              unexpected "Tylko znaki od a-z"
+            else
+              return $ (ord x) - (ord 'a') + 1
+
+play :: GameBoard -> (IO ())
+play board = do
+  case (endGame board) of
+    UserWin -> (hPutStrLn stderr ((show board) ++ "\nUser Won!"))
+    ComputerWin -> (hPutStrLn stderr ((show board) ++ "\nComputer Won!"))
+    Draw -> (hPutStrLn stderr ((show board) ++ "\nDraw!"))
+    InProgress -> do
+      hPutStrLn stderr ("Your turn!\n" ++ (show board))
+      putStrLn (show board)
+      putStrLn "\nEnter coordinates: "
+      coords <- getLine
+      --tutaj parsowanie...
+      let userMove = (putPawn White (2,3) board)
+      case (endGame userMove) of
+        UserWin -> (hPutStrLn stderr ((show board) ++ "\nUser Won!"))
+        ComputerWin -> (hPutStrLn stderr ((show board) ++ "\nComputer Won!"))
+        Draw -> (hPutStrLn stderr ((show board) ++ "\nDraw!"))
+        InProgress -> do
+          let enemyMove = (minimaxPutPawn userMove)
+          putStrLn ("\nEnemy turn!\n" ++ (show enemyMove))
+          play enemyMove
+
+-------------------------------------------------------------------------------
+------------------------------------ Tests ------------------------------------
+
+--putPawn White (3,5) $ putPawn Black (3,6) $ putPawn White (2,5) initializeBoard
+
+--findPositionsNearPawn (putPawn White (3,5) ( putPawn Black (3,6) ( putPawn White (2,5) initializeBoard))) $ allBusyPositions $ putPawn White (3,5) $ putPawn Black (3,6) $ putPawn White (2,5) initializeBoard
+
+--endGame $ putPawn White (3,5) $ putPawn Black (3,6) $ putPawn White (2,5) initializeBoard
+--endGame $ putPawn White (3,1) $ putPawn White (3,4) $ putPawn White (3,3) $ putPawn White (3,2) $ putPawn White (3,5) $ putPawn Black (3,6) $ putPawn White (2,5) initializeBoard
+--endGame $ putPawn White (3,1) $ putPawn White (3,4) $ putPawn White (3,3) $ putPawn White (3,2) $ putPawn White (3,5) $ putPawn White (3,6) $ putPawn White (2,5) initializeBoard
+
+--test rateBoard (putPawn White (3,5) $ putPawn Black (3,6) $ putPawn White (2,5) initializeBoard)
